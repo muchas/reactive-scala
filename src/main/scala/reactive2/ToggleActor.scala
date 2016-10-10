@@ -23,6 +23,8 @@ package reactive2
 import akka.actor._
 import akka.actor.Props
 import akka.event.LoggingReceive
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 class Toggle extends Actor {
 
@@ -60,7 +62,7 @@ class ToggleMain extends Actor {
       toggle ! "Done"
 
     case "Done" =>
-      context.system.shutdown
+      context.system.terminate
 
     case msg: String =>
       println(s" received: $msg")
@@ -74,5 +76,5 @@ object ToggleApp extends App {
 
   mainActor ! "Init"
 
-  system.awaitTermination()
+  Await.result(system.whenTerminated, Duration.Inf)
 }

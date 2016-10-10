@@ -2,6 +2,8 @@ package reactive2
 
 import akka.actor._
 import akka.event.LoggingReceive
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 ////////////////////////////////////////
 // More complex example: Bank account //
@@ -94,7 +96,7 @@ class Bank extends Actor {
     context.become(LoggingReceive {
       case WireTransfer.Done =>
         println("success")
-        context.system.shutdown
+        context.system.terminate
     })
   }
 }
@@ -105,5 +107,5 @@ object BankApp extends App {
 
   mainActor ! BankAccount.Init
 
-  system.awaitTermination()
+  Await.result(system.whenTerminated, Duration.Inf)
 }
