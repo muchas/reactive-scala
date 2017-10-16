@@ -16,7 +16,11 @@ object tutorial5 {
   //          def apply(n: Int) = new Number(n)
   //      }
   // 2. Parameters of the constructor are automatically members of the class
-  // 3. Case classes can be used in pattern matching
+  // 3. Immutable by default
+  // 4. Automatically defined getters
+  // 5. Default implementations of toString(), equals()
+  // 6. Automatically serializable
+  // 7. Can be used in pattern matching
   
   // Case classes are useful for defining data structures
 
