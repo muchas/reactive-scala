@@ -21,6 +21,12 @@ object CartManager {
 
   sealed trait Event
 
+  // Protocol
+  case object GetItemsRequest
+  case class GetItemsResponse(items: Seq[Item])
+
+
+  // Events
   case class AddItem(item: Item, count: Int) extends Event
   case class ItemAdded(item: Item, count: Int)
   case class RemoveItem(item: Item, count: Int) extends Event
@@ -31,16 +37,21 @@ object CartManager {
 }
 
 
-class CartManager(customer: ActorRef, var shoppingCart: Cart) extends PersistentActor with Timers {
+class CartManager(customer: ActorRef, id: String, var shoppingCart: Cart) extends PersistentActor with Timers {
   import CartManager._
 
   val cartTimeout: FiniteDuration = 120 seconds
 
-  override def persistenceId = "persistent-cart-manager-id-1"
+  override def persistenceId: String = id
 
   def this(customer: ActorRef) = {
-    this(customer, Cart.empty)
+    this(customer, "persistent-cart-manager-id-1", Cart.empty)
   }
+
+  def this(customer: ActorRef, id: String) = {
+    this(customer, id, Cart.empty)
+  }
+
 
   private def startTimer(timestamp: Long, time: FiniteDuration): Unit = {
     timers.startSingleTimer("cart-timer-" + timestamp, CartTimeExpired, time)
@@ -63,10 +74,6 @@ class CartManager(customer: ActorRef, var shoppingCart: Cart) extends Persistent
             case NonEmpty(timestamp) =>
               val now = System.currentTimeMillis()
               val diff = Math.max((now - timestamp) / 1000.0, 0)
-
-              print("Mam " + shoppingCart.itemsCount() + " itemy \n")
-              print("Zostalo " + (cartTimeout - diff.seconds) + " sekund \n")
-
               startTimer(timestamp, cartTimeout - diff.seconds)
               context become nonEmpty
             case InCheckout =>
@@ -96,6 +103,10 @@ class CartManager(customer: ActorRef, var shoppingCart: Cart) extends Persistent
           sender ! ItemAdded(item, count)
           becomeNonEmpty()
       }
+
+    case GetItemsRequest =>
+      print("ELO MORDO \n")
+      sender ! GetItemsResponse(items = shoppingCart.itemsList())
   }
 
   def nonEmpty: Receive = LoggingReceive {
@@ -106,11 +117,10 @@ class CartManager(customer: ActorRef, var shoppingCart: Cart) extends Persistent
     case AddItem(item, count) =>
       persist(AddItem(item, count)) { event =>
         updateState(event)
-        print("Mam " + shoppingCart.itemsCount() + " itemy \n")
         sender ! ItemAdded(item, count)
       }
 
-    case RemoveItem(item, count) =>
+    case RemoveItem(item, count) if shoppingCart.items contains item.id =>
       persist(RemoveItem(item, count)) { event =>
           updateState(event)
           sender ! ItemRemoved(item, count)
@@ -121,6 +131,8 @@ class CartManager(customer: ActorRef, var shoppingCart: Cart) extends Persistent
     case StartCheckout =>
       customer ! CheckoutStarted(createCheckout())
       persist(ChangeState(InCheckout)) { event => updateState(event) }
+
+    case GetItemsRequest => sender ! GetItemsResponse(items = shoppingCart.itemsList())
   }
 
   def createCheckout(): ActorRef = {
@@ -130,6 +142,7 @@ class CartManager(customer: ActorRef, var shoppingCart: Cart) extends Persistent
   def inCheckout: Receive = LoggingReceive {
     case CheckoutClosed => becomeEmpty()
     case CheckoutCancelled => becomeNonEmpty()
+    case GetItemsRequest => sender ! GetItemsResponse(items = shoppingCart.itemsList())
   }
 
   override def receiveCommand: Receive = empty
