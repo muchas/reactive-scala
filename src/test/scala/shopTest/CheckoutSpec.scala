@@ -34,7 +34,7 @@ class CheckoutSpec extends TestKit(ActorSystem("CartSpec"))
       customer.send(checkout, Checkout.PaymentSelected("paypal"))
       customer.expectMsg(Checkout.PaymentServiceStarted(paymentService))
       checkout ! Checkout.PaymentReceived
-      cart.expectMsg(Cart.CheckoutClosed)
+      cart.expectMsg(CartManager.CheckoutClosed)
     }
 
     "inform about cart cancel when checkout cancelled" in {
@@ -42,7 +42,7 @@ class CheckoutSpec extends TestKit(ActorSystem("CartSpec"))
       customer.send(checkout, Checkout.PaymentSelected("paypal"))
       customer.expectMsg(Checkout.PaymentServiceStarted(paymentService))
       checkout ! Checkout.Cancelled
-      cart.expectMsg(Cart.CheckoutCancelled)
+      cart.expectMsg(CartManager.CheckoutCancelled)
     }
 
     "inform about cart cancel when payment expired" in {
@@ -50,13 +50,13 @@ class CheckoutSpec extends TestKit(ActorSystem("CartSpec"))
       customer.send(checkout, Checkout.PaymentSelected("paypal"))
       customer.expectMsg(Checkout.PaymentServiceStarted(paymentService))
       checkout ! Checkout.PaymentTimerExpired
-      cart.expectMsg(Cart.CheckoutCancelled)
+      cart.expectMsg(CartManager.CheckoutCancelled)
     }
 
     "inform about cart cancel when checkout expired" in {
       customer.send(checkout, Checkout.DeliveryMethodSelected("dhl"))
       checkout ! Checkout.CheckoutTimerExpired
-      cart.expectMsg(Cart.CheckoutCancelled)
+      cart.expectMsg(CartManager.CheckoutCancelled)
     }
   }
 }

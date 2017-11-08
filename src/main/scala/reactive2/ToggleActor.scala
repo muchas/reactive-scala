@@ -55,7 +55,7 @@ class ToggleMain extends Actor {
   val toggle = context.actorOf(Props[Toggle], "toggle")
 
   def receive = LoggingReceive {
-    case "Init" =>
+    case "StartShopping" =>
       toggle ! "How are you?"
       toggle ! "How are you?"
       toggle ! "How are you?"
@@ -74,7 +74,7 @@ object ToggleApp extends App {
   val system = ActorSystem("Reactive2")
   val mainActor = system.actorOf(Props[ToggleMain], "mainActor")
 
-  mainActor ! "Init"
+  mainActor ! "StartShopping"
 
   Await.result(system.whenTerminated, Duration.Inf)
 }

@@ -1,5 +1,7 @@
 package shop
 
+import java.net.URI
+
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.LoggingReceive
 
@@ -12,32 +14,32 @@ class Customer extends Actor {
 
   import Customer._
 
-  val cart: ActorRef = context.actorOf(Props(new Cart(self)), "cart")
+  val cart: ActorRef = context.actorOf(Props(new CartManager(self)), "cart")
 
   def receive: Receive = LoggingReceive {
 
     case Init =>
-      val watch = new Item("zegarek")
-      val shoes = new Item("buty")
-      val game = new Item("game")
+      val watch = Item(URI.create("1"), "zegarek", 5.12)
+      val shoes = Item(URI.create("2"), "buty", 1.12)
+      val game = Item(URI.create("3"), "kapcie", 6.20)
 
-      cart ! Cart.AddItem(watch)
-      cart ! Cart.RemoveItem(watch)
-      cart ! Cart.AddItem(shoes)
-      cart ! Cart.AddItem(watch)
-      cart ! Cart.RemoveItem(watch)
-      cart ! Cart.AddItem(game)
+      cart ! CartManager.AddItem(watch, 1)
+      cart ! CartManager.RemoveItem(watch, 1)
+      cart ! CartManager.AddItem(shoes, 1)
+      cart ! CartManager.AddItem(watch, 1)
+      cart ! CartManager.RemoveItem(watch, 1)
+      cart ! CartManager.AddItem(game, 1)
 
-      cart ! Cart.StartCheckout
+      cart ! CartManager.StartCheckout
 
-    case Cart.CheckoutStarted(checkout: ActorRef) =>
+    case CartManager.CheckoutStarted(checkout: ActorRef) =>
       checkout ! Checkout.DeliveryMethodSelected("dhl")
       checkout ! Checkout.PaymentSelected("visa")
 
-    case Cart.CheckoutClosed =>
+    case CartManager.CheckoutClosed =>
       print("Customer: checkout closed!")
 
-    case Cart.CartEmpty =>
+    case CartManager.CartEmpty =>
       print("Customer: cart is empty!")
 
     case Checkout.PaymentServiceStarted(payment: ActorRef) =>

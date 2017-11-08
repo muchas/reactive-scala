@@ -44,7 +44,7 @@ class Checkout(customer: ActorRef, cart: ActorRef) extends Actor with Timers {
       deliveryMethod = method
       context become selectingPaymentMethod
     case (Cancelled | CheckoutTimerExpired) =>
-      cart ! Cart.CheckoutCancelled
+      cart ! CartManager.CheckoutCancelled
       context.stop(self)
   }
 
@@ -58,7 +58,7 @@ class Checkout(customer: ActorRef, cart: ActorRef) extends Actor with Timers {
       startPaymentTimer()
       context become processingPayment
     case (Cancelled | CheckoutTimerExpired) =>
-      cart ! Cart.CheckoutCancelled
+      cart ! CartManager.CheckoutCancelled
       context.stop(self)
   }
 
@@ -68,11 +68,11 @@ class Checkout(customer: ActorRef, cart: ActorRef) extends Actor with Timers {
 
   def processingPayment: Receive = LoggingReceive {
     case PaymentReceived =>
-      customer ! Cart.CheckoutClosed
-      cart ! Cart.CheckoutClosed
+      customer ! CartManager.CheckoutClosed
+      cart ! CartManager.CheckoutClosed
       context.stop(self)
     case (Cancelled | PaymentTimerExpired) =>
-      cart ! Cart.CheckoutCancelled
+      cart ! CartManager.CheckoutCancelled
       context.stop(self)
   }
 
