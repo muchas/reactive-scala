@@ -1,65 +1,128 @@
 package shop
 
-import akka.actor.{Actor, ActorRef, Props, Timers}
+import akka.actor.{ActorRef, Props, Timers}
 import akka.event.LoggingReceive
+import akka.persistence.PersistentActor
 
 import scala.concurrent.duration._
 
 
 object Checkout {
-  private case object TimerKey
-  case class DeliveryMethodSelected(method: String)
 
+  // Protocol
   case object Cancelled
   case object CheckoutTimerExpired
   case object PaymentTimerExpired
-  case class PaymentSelected(method: String)
   case object PaymentReceived
-
   case class PaymentServiceStarted(payment: ActorRef)
+
+  // States
+  sealed trait CheckoutState
+  case class SelectingDelivery(timestamp: Long) extends CheckoutState
+  case class SelectingPaymentMethod(timestamp: Long) extends CheckoutState
+  case class ProcessingPayment(timestamp: Long) extends CheckoutState
+  case object CheckoutCancelled extends CheckoutState
+  case object CheckoutClosed extends CheckoutState
+
+  // Events
+  sealed trait Event
+  case class PaymentSelected(method: String) extends Event
+  case class DeliveryMethodSelected(method: String) extends Event
+  private case class StateChanged(state: CheckoutState) extends Event
 }
 
-class Checkout(customer: ActorRef, cart: ActorRef) extends Actor with Timers {
+class Checkout(customer: ActorRef, cart: ActorRef, id: String) extends PersistentActor with Timers {
   import Checkout._
+
+  val checkoutTimeout: FiniteDuration = 120 seconds
+  val paymentTimeout: FiniteDuration = 120 seconds
 
   var paymentMethod = "default"
   var deliveryMethod = "default"
 
+  override def persistenceId: String = id
 
-  private def startCheckoutTimer(): Unit = {
-    timers.startSingleTimer(TimerKey, CheckoutTimerExpired, 3 seconds)
+  def this(customer: ActorRef, cart: ActorRef) = {
+    this(customer, cart, "persistent-checkout-id-1")
   }
 
-  private def startPaymentTimer(): Unit = {
-    timers.startSingleTimer(TimerKey, PaymentTimerExpired, 3 seconds)
+  private def startCheckoutTimer(timestamp: Long, time: FiniteDuration): Unit = {
+    timers.startSingleTimer("checkout-timer-" + timestamp, CheckoutTimerExpired, time)
+  }
+
+  private def startPaymentTimer(timestamp: Long, time: FiniteDuration): Unit = {
+    timers.startSingleTimer("payment-timer-" + timestamp, PaymentTimerExpired, time)
+  }
+
+  private def cancelTimers(): Unit = {
+    timers.cancelAll()
+  }
+
+  private def calculateElapsedTime(timestamp: Long): FiniteDuration = {
+    val now = System.currentTimeMillis()
+    val diff = Math.max((now - timestamp) / 1000.0, 0)
+    diff.seconds
+  }
+
+  private def updateState(event: Event): Unit = {
+    event match {
+      case DeliveryMethodSelected(method) => deliveryMethod = method
+      case PaymentSelected(method) => paymentMethod = method
+      case StateChanged(state) =>
+        state match {
+          case SelectingDelivery(timestamp) =>
+            cancelTimers()
+            startCheckoutTimer(timestamp, checkoutTimeout - calculateElapsedTime(timestamp))
+            context become selectingDelivery
+
+          case SelectingPaymentMethod(timestamp) =>
+            cancelTimers()
+            startCheckoutTimer(timestamp, checkoutTimeout - calculateElapsedTime(timestamp))
+            context become selectingPaymentMethod
+
+          case ProcessingPayment(timestamp) =>
+            cancelTimers()
+            startPaymentTimer(timestamp, paymentTimeout - calculateElapsedTime(timestamp))
+            context become processingPayment
+
+          case CheckoutCancelled =>
+            context.stop(self)
+        }
+    }
   }
 
   override def preStart(): Unit = {
     super.preStart()
-    startCheckoutTimer()
+    startCheckoutTimer(System.currentTimeMillis(), checkoutTimeout)
   }
 
   def selectingDelivery: Receive = LoggingReceive {
     case DeliveryMethodSelected(method) =>
-      deliveryMethod = method
-      context become selectingPaymentMethod
+      val now = System.currentTimeMillis()
+      persist(DeliveryMethodSelected(method)) { event => updateState(event) }
+      persist(StateChanged(SelectingPaymentMethod(now))) { event => updateState(event) }
+
     case (Cancelled | CheckoutTimerExpired) =>
-      cart ! CartManager.CheckoutCancelled
-      context.stop(self)
+      persist(StateChanged(CheckoutCancelled)) { event =>
+        cart ! CartManager.CheckoutCancelled
+        updateState(event)
+      }
   }
 
   def selectingPaymentMethod: Receive = LoggingReceive {
     case PaymentSelected(method) =>
-      paymentMethod = method
+      val now = System.currentTimeMillis()
+      persist(PaymentSelected(method)) { event => updateState(event) }
+      persist(StateChanged(ProcessingPayment(now))) { event =>
+        updateState(event)
+        customer ! PaymentServiceStarted(createPayment())
+      }
 
-      val paymentService = createPayment()
-      customer ! PaymentServiceStarted(paymentService)
-
-      startPaymentTimer()
-      context become processingPayment
     case (Cancelled | CheckoutTimerExpired) =>
-      cart ! CartManager.CheckoutCancelled
-      context.stop(self)
+      persist(StateChanged(CheckoutCancelled)) { event =>
+        cart ! CartManager.CheckoutCancelled
+        updateState(event)
+      }
   }
 
   def createPayment(): ActorRef = {
@@ -68,14 +131,21 @@ class Checkout(customer: ActorRef, cart: ActorRef) extends Actor with Timers {
 
   def processingPayment: Receive = LoggingReceive {
     case PaymentReceived =>
-      customer ! CartManager.CheckoutClosed
-      cart ! CartManager.CheckoutClosed
-      context.stop(self)
+      persist(StateChanged(CheckoutClosed)) { event =>
+        customer ! CartManager.CheckoutClosed
+        cart ! CartManager.CheckoutClosed
+        updateState(event)
+      }
+
     case (Cancelled | PaymentTimerExpired) =>
-      cart ! CartManager.CheckoutCancelled
-      context.stop(self)
+      persist(StateChanged(CheckoutCancelled)) { event =>
+        cart ! CartManager.CheckoutCancelled
+        updateState(event)
+      }
   }
 
-
-  def receive: Receive = selectingDelivery
+  override def receiveCommand: Receive = selectingDelivery
+  override def receiveRecover: Receive = LoggingReceive {
+    case event: Event => updateState(event)
+  }
 }

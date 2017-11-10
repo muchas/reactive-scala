@@ -104,9 +104,7 @@ class CartManager(customer: ActorRef, id: String, var shoppingCart: Cart) extend
           becomeNonEmpty()
       }
 
-    case GetItemsRequest =>
-      print("ELO MORDO \n")
-      sender ! GetItemsResponse(items = shoppingCart.itemsList())
+    case GetItemsRequest => sender ! GetItemsResponse(items = shoppingCart.itemsList())
   }
 
   def nonEmpty: Receive = LoggingReceive {
