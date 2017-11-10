@@ -66,7 +66,7 @@ class Checkout(customer: ActorRef, cart: ActorRef, id: String) extends Persisten
   private def cancelTimers(): Unit = {
     timers.cancelAll()
   }
-git add -
+
   private def calculateElapsedTime(timestamp: Long): FiniteDuration = {
     val now = System.currentTimeMillis()
     val diff = Math.max((now - timestamp) / 1000.0, 0)
