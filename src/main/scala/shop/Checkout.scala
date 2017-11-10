@@ -10,6 +10,15 @@ import scala.concurrent.duration._
 object Checkout {
 
   // Protocol
+  case object DeliveryMethodRequest
+  case class DeliveryMethodResponse(method: String)
+
+  case object PaymentMethodRequest
+  case class PaymentMethodResponse(method: String)
+
+  case object StateRequest
+  case class StateResponse(state: CheckoutState)
+
   case object Cancelled
   case object CheckoutTimerExpired
   case object PaymentTimerExpired
@@ -57,7 +66,7 @@ class Checkout(customer: ActorRef, cart: ActorRef, id: String) extends Persisten
   private def cancelTimers(): Unit = {
     timers.cancelAll()
   }
-
+git add -
   private def calculateElapsedTime(timestamp: Long): FiniteDuration = {
     val now = System.currentTimeMillis()
     val diff = Math.max((now - timestamp) / 1000.0, 0)
@@ -99,23 +108,33 @@ class Checkout(customer: ActorRef, cart: ActorRef, id: String) extends Persisten
   def selectingDelivery: Receive = LoggingReceive {
     case DeliveryMethodSelected(method) =>
       val now = System.currentTimeMillis()
-      persist(DeliveryMethodSelected(method)) { event => updateState(event) }
-      persist(StateChanged(SelectingPaymentMethod(now))) { event => updateState(event) }
+      persist(DeliveryMethodSelected(method)) { event =>
+        updateState(event)
+        persist(StateChanged(SelectingPaymentMethod(now))) { event =>
+          updateState(event)
+          customer ! DeliveryMethodSelected(method)
+        }
+      }
 
     case (Cancelled | CheckoutTimerExpired) =>
       persist(StateChanged(CheckoutCancelled)) { event =>
         cart ! CartManager.CheckoutCancelled
         updateState(event)
       }
+
+    case StateRequest => sender ! StateResponse(SelectingDelivery(0))
   }
 
   def selectingPaymentMethod: Receive = LoggingReceive {
     case PaymentSelected(method) =>
       val now = System.currentTimeMillis()
-      persist(PaymentSelected(method)) { event => updateState(event) }
-      persist(StateChanged(ProcessingPayment(now))) { event =>
+      persist(PaymentSelected(method)) { event =>
         updateState(event)
-        customer ! PaymentServiceStarted(createPayment())
+
+        persist(StateChanged(ProcessingPayment(now))) { event =>
+          updateState(event)
+          customer ! PaymentServiceStarted(createPayment())
+        }
       }
 
     case (Cancelled | CheckoutTimerExpired) =>
@@ -123,6 +142,9 @@ class Checkout(customer: ActorRef, cart: ActorRef, id: String) extends Persisten
         cart ! CartManager.CheckoutCancelled
         updateState(event)
       }
+
+    case DeliveryMethodRequest => sender ! DeliveryMethodResponse(deliveryMethod)
+    case StateRequest => sender ! StateResponse(SelectingPaymentMethod(0))
   }
 
   def createPayment(): ActorRef = {
@@ -142,6 +164,10 @@ class Checkout(customer: ActorRef, cart: ActorRef, id: String) extends Persisten
         cart ! CartManager.CheckoutCancelled
         updateState(event)
       }
+
+    case DeliveryMethodRequest => sender ! DeliveryMethodResponse(deliveryMethod)
+    case PaymentMethodRequest => sender ! PaymentMethodResponse(paymentMethod)
+    case StateRequest => sender ! StateResponse(ProcessingPayment(0))
   }
 
   override def receiveCommand: Receive = selectingDelivery
