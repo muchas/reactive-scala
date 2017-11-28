@@ -96,6 +96,8 @@ class Checkout(customer: ActorRef, cart: ActorRef, id: String) extends Persisten
 
           case CheckoutCancelled =>
             context.stop(self)
+
+          case _ =>
         }
     }
   }

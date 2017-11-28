@@ -8,7 +8,6 @@ import akka.event.LoggingReceive
 object Customer {
   case object Init
   case object Search
-  case object DoPayment
 }
 
 class Customer extends Actor {
@@ -21,7 +20,7 @@ class Customer extends Actor {
   def receive: Receive = LoggingReceive {
 
     // Search Queries
-    case Search => catalog ! ProductCatalogManager.SearchRequest("fanta", 12)
+    case Search => catalog ! ProductCatalogManager.SearchRequest("cheese", 3)
     case ProductCatalogManager.SearchResponse(items) => items.foreach(println)
 
 
@@ -51,7 +50,7 @@ class Customer extends Actor {
       print("Customer: cart is empty!")
 
     case Checkout.PaymentServiceStarted(payment: ActorRef) =>
-      payment ! DoPayment
+      payment ! PaymentService.DoPayment("paypal")
 
     case PaymentService.PaymentConfirmed =>
       print("Customer: payment confirmed!")

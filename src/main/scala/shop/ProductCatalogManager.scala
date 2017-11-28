@@ -13,7 +13,7 @@ object ProductCatalogManager {
   case class RemoveItemResponse(item: Item, quantity: Int = 1)
 
   case class SearchRequest(query: String, limit: Int = 10)
-  case class SearchResponse(items: Seq[Item])
+  case class SearchResponse(items: List[Item])
 }
 
 

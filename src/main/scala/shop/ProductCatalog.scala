@@ -36,7 +36,7 @@ case class ProductCatalog(items: Map[URI, (Item, Int)]) {
           .sum
     }
 
-    def search(query: String, limit: Int): Seq[Item] =
+    def search(query: String, limit: Int): List[Item] =
         items.values
           .toStream
           .filter(_._2 > 0)

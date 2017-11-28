@@ -16,7 +16,8 @@ object ShopApp extends App {
   val catalogActor = catalogSystem.actorOf(Props(new ProductCatalogManager("./query_result")), "productCatalogManager")
   val mainActor = system.actorOf(Props[Customer], "mainActor")
 
-  mainActor ! Customer.Search
+//  mainActor ! Customer.Search
+  mainActor ! Customer.Init
 
   Await.result(system.whenTerminated, Duration.Inf)
 }
